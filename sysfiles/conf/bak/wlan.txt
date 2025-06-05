@@ -1,0 +1,7 @@
+ssid=
+password=
+dhcp=
+ip=
+zwym=
+wg=
+dns=
