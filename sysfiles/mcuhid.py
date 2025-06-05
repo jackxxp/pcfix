@@ -1,139 +1,159 @@
-import time
+import asyncio
 import usb_hid
 from adafruit_hid.keyboard import Keyboard
-from adafruit_hid.keycode import Keycode
 from adafruit_hid.mouse import Mouse
 from adafruit_hid.consumer_control import ConsumerControl
-from adafruit_hid.consumer_control_code import ConsumerControlCode
 from adafruit_hid.keyboard_layout_us import KeyboardLayoutUS
+from adafruit_hid.keycode import Keycode
+import time
 
-class HIDModule:
-    def __init__(self):
+class HIDController:
+    def __init__(self, timeout=1.0):
         self.keyboard = None
         self.mouse = None
         self.consumer_control = None
         self.keyboard_layout = None
         self.initialized = False
         self.error_message = None
-        self.timeout = 5  # 设置超时时间为5秒
+        self.timeout = timeout
+        self._init_task = None
 
+    async def ensure_initialized(self):
+        """确保HID设备已初始化"""
+        if self.initialized:
+            return True
+        if self._init_task is None:
+            self._init_task = asyncio.create_task(self._initialize_hid())
         try:
-            self.keyboard = Keyboard(usb_hid.devices)
-            self.mouse = Mouse(usb_hid.devices)
-            self.consumer_control = ConsumerControl(usb_hid.devices)
-            self.keyboard_layout = KeyboardLayoutUS(self.keyboard)
-            self.initialized = True
-        except Exception as e:
-            self.error_message = f"Initialization failed: {e}"
+            await asyncio.wait_for(self._init_task, timeout=self.timeout)
+            return self.initialized
+        except asyncio.TimeoutError:
+            self.error_message = "HID initialization timed out"
+            return False
 
-    def hid_mouse_move(self, px, py, wheel=0):
-        """模拟鼠标移动和滚轮操作
-        px: 水平方向移动的像素值（正数向右，负数向左）
-        py: 垂直方向移动的像素值（正数向下，负数向上）
-        wheel: 滚轮滚动值（正数向上，负数向下）
-        """
-        if not self.initialized:
+    async def _initialize_hid(self):
+        """异步初始化HID设备"""
+        try:
+            start_time = time.monotonic()  # 使用CircuitPython兼容的时间函数
+            
+            while True:
+                try:
+                    devices = usb_hid.devices
+                    if devices:
+                        self.keyboard = Keyboard(devices)
+                        self.mouse = Mouse(devices)
+                        self.consumer_control = ConsumerControl(devices)
+                        self.keyboard_layout = KeyboardLayoutUS(self.keyboard)
+                        self.initialized = True
+                        self.error_message = None
+                        return
+                except Exception as e:
+                    self.error_message = f"HID init attempt failed: {str(e)}"
+                
+                # 检查是否超时
+                elapsed = time.monotonic() - start_time
+                if elapsed > self.timeout:
+                    raise asyncio.TimeoutError("HID initialization timeout")
+                
+                # 非阻塞等待
+                await asyncio.sleep(0.1)
+        except Exception as e:
+            self.error_message = f"HID initialization failed: {str(e)}"
+            raise
+        finally:
+            self._init_task = None
+
+    async def process_command(self, command: bytes):
+        """处理输入的命令"""
+        if not await self.ensure_initialized():
             return self.error_message
-
-        try:
-            self.mouse.move(x=px, y=py, wheel=wheel)
-            return "Mouse moved and scrolled successfully"
-        except Exception as e:
-            return f"Error moving or scrolling mouse: {e}"
-
-    def hid_mouse_key(self, action, button):
-        """模拟鼠标按键操作
-        action: 'press' 或 'release'
-        button: 'left', 'middle', 'right'
-        """
-        if not self.initialized:
-            return self.error_message
-
-        try:
-            if button == "left":
-                button_code = Mouse.LEFT_BUTTON
-            elif button == "middle":
-                button_code = Mouse.MIDDLE_BUTTON
-            elif button == "right":
-                button_code = Mouse.RIGHT_BUTTON
-            else:
-                return "Invalid button"
-
-            if action == "press":
-                self.mouse.press(button_code)
-            elif action == "release":
-                self.mouse.release(button_code)
-            else:
-                return "Invalid action"
-
-            return "Mouse button action performed successfully"
-        except Exception as e:
-            return f"Error performing mouse button action: {e}"
-
-    def hid_key(self, dongzuo, anjian):
-        """模拟键盘操作，dongzuo是按下还是释放，anjian是按键"""
-        if not self.initialized:
-            return self.error_message
-
-        try:
-            if dongzuo == "press":
-                self.keyboard.press(getattr(Keycode, anjian.upper()))
-            elif dongzuo == "release":
-                self.keyboard.release(getattr(Keycode, anjian.upper()))
-            else:
-                return "Invalid action"
-            return "Key action performed successfully"
-        except Exception as e:
-            return f"Error performing key action: {e}"
-
-    def hid_input(self, str, huanghang):
-        """输入字符串，huanghang是是否在末尾加上回车"""
-        if not self.initialized:
-            return self.error_message
-
-        try:
-            self.keyboard_layout.write(str)
-            if huanghang:
-                self.keyboard.send(Keycode.ENTER)
-            return "String input successful"
-        except Exception as e:
-            return f"Error inputting string: {e}"
-
-    def hid_zhj(self, zhuhejian):
-        """模拟组合键操作，zhuhejian是组合键"""
-        if not self.initialized:
-            return self.error_message
-
-        try:
-            keys = zhuhejian.split("+")
-            keycodes = [getattr(Keycode, key.upper()) for key in keys]
-            self.keyboard.send(*keycodes)
-            return "Combination key pressed successfully"
-        except Exception as e:
-            return f"Error pressing combination key: {e}"
-
-    def hid_any(self, zhi):
-        """模拟自定义键值操作，zhi是键值"""
-        if not self.initialized:
-            return self.error_message
-
-        try:
-            self.keyboard.send(int(zhi, 16))  # 将十六进制字符串转换为整数
-            return "Custom key value sent successfully"
-        except Exception as e:
-            return f"Error sending custom key value: {e}"
-
-    def check_hid(self):
-        """检查HID设备是否连接"""
-        if not self.initialized:
-            return self.error_message
-
-        try:
-            # 检查设备是否仍然连接
-            if not self.keyboard or not self.mouse or not self.consumer_control:
-                return "HID devices disconnected"
-            return "HID devices connected"
-        except Exception as e:
-            return f"Error checking HID devices: {e}"
         
+        try:
+            parts = command.decode().split()
+            if not parts:
+                return "Empty command"
+                
+            cmd_type = parts[0]
+            
+            if cmd_type == "hid":
+                if len(parts) < 2:
+                    return "Incomplete command"
+                
+                sub_cmd = parts[1]
+                
+                # 鼠标移动命令: hid sb m x y wheel
+                if sub_cmd == "sb" and len(parts) >= 5 and parts[2] == "m":
+                    try:
+                        x = int(parts[3])
+                        y = int(parts[4])
+                        wheel = int(parts[5]) if len(parts) > 5 else 0
+                        return await self._move_mouse(x, y, wheel)
+                    except ValueError:
+                        return "Invalid mouse move parameters"
+                
+                # 鼠标按键命令: hid sb k [p/r] [l/m/r]
+                elif sub_cmd == "sb" and len(parts) >= 5 and parts[2] == "k":
+                    action = parts[3]
+                    button = parts[4]
+                    return await self._mouse_button(action, button)
+                
+                # 键盘按键命令: hid jp [p/r] key
+                elif sub_cmd == "jp" and len(parts) >= 4:
+                    action = parts[2]
+                    key = parts[3]
+                    return await self._key_action(action, key)
+                
+                else:
+                    return f"Unknown sub-command: {sub_cmd}"
+            else:
+                return f"Unknown command type: {cmd_type}"
+        except Exception as e:
+            return f"Command processing error: {str(e)}"
 
+    async def _move_mouse(self, x, y, wheel=0):
+        """移动鼠标"""
+        try:
+            self.mouse.move(x=x, y=y, wheel=wheel)
+            return f"Mouse moved: x={x}, y={y}, wheel={wheel}"
+        except Exception as e:
+            return f"Mouse move failed: {str(e)}"
+
+    async def _mouse_button(self, action, button):
+        """鼠标按键动作"""
+        button_map = {
+            "l": Mouse.LEFT_BUTTON,
+            "m": Mouse.MIDDLE_BUTTON,
+            "r": Mouse.RIGHT_BUTTON
+        }
+        
+        if button not in button_map:
+            return f"Invalid mouse button: {button}"
+            
+        try:
+            if action == "p":
+                self.mouse.press(button_map[button])
+                return f"Mouse {button} pressed"
+            elif action == "r":
+                self.mouse.release(button_map[button])
+                return f"Mouse {button} released"
+            else:
+                return f"Invalid mouse action: {action}"
+        except Exception as e:
+            return f"Mouse button action failed: {str(e)}"
+
+    async def _key_action(self, action, key):
+        """键盘按键动作"""
+        try:
+            keycode = getattr(Keycode, key.upper())
+            if action == "p":
+                self.keyboard.press(keycode)
+                return f"Key {key} pressed"
+            elif action == "r":
+                self.keyboard.release(keycode)
+                return f"Key {key} released"
+            else:
+                return f"Invalid key action: {action}"
+        except AttributeError:
+            return f"Invalid key: {key}"
+        except Exception as e:
+            return f"Key action failed: {str(e)}"
