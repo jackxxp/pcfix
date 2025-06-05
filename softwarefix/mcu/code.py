@@ -9,128 +9,106 @@ sys.path.append('/sysfiles')
 import uart_hmi
 import battery
 import app_manager
-from mcuhid import HIDController
+import mcuhid
 
-# 初始化各个模块
-async def initialize_system():
-    # 初始化HMI串口显示
-    hmi = uart_hmi.SerialDisplay()
-    
-    # 初始化电池监测
-    battery_instance = battery.Battery(board.GPIO2, board.GPIO3)
-    
-    # 初始化App管理器
-    app_mgr = app_manager.AppManager(hmi)
-    
-    # 显示启动页面
-    hmi.tx("any", "page boot")
-    hmi.tx("bootlog", "MCU启动中...")
-    
-    # 初始化HID控制器
-    hmi.tx("bootlog", "初始化HID设备")
-    hid = HIDController(timeout=1.0)
-    
-    # 切换到主页面
-    hmi.tx("any", "page sys_home")
-    
-    return hmi, battery_instance, app_mgr, hid
 
-# 电池信息发送任务
-async def battery_info_task(hmi, battery_instance):
+# 初始化 HMI 和电池模块
+hmi = uart_hmi.SerialDisplay()
+battery_instance = battery.Battery(board.GPIO2, board.GPIO3)
+hid = mcuhid.HIDController(timeout=1.0)
+# 初始化 AppManager 并传递 hmi 对象
+app_manager = app_manager.AppManager(hmi)
+
+# 初始化 HMI 页面
+hmi.tx("any", "page boot")
+hmi.tx("bootlog", "MCU启动")
+time.sleep(1)
+hmi.tx("any", "page sys_home")
+
+async def hmi_info_send():
     while True:
-        try:
-            voltage = battery_instance.get_voltage()
-            soc = battery_instance.get_soc()
-            charging = battery_instance.is_charging()
-            
-            # 更新HMI显示
-            hmi.info_set("batv", f"{voltage:.1f}")
-            hmi.info_set("batn", f"{soc:.0f}")
-            hmi.info_set("batc", "1" if charging else "0")
-            
-        except Exception as e:
-            print(f"电池信息更新错误: {e}")
+        hmi.run()
+        voltage = battery_instance.get_voltage()
+        soc = battery_instance.get_soc()
+        charging = battery_instance.is_charging()
+        
+        # 向屏幕发送电池信息
+        hmi.info_set("batv", f"{voltage:.1f}")  # 电池电压，保留1位小数
+        hmi.info_set("batn", f"{soc:.0f}")      # 电量百分比，整数
+        hmi.info_set("batc", f"{1 if charging else 0}")  # 充电状态，1表示正在充电，0表示未充电
         
         await asyncio.sleep(1)
-
-# 按键扫描任务
-async def key_scan_task(hmi, app_mgr):
+async def key_scan():
     button = digitalio.DigitalInOut(board.GPIO10)
     button.direction = digitalio.Direction.INPUT
-    button.pull = digitalio.Pull.UP
-    
-    last_state = button.value
-    debounce_time = 0
-    
+    button.pull = digitalio.Pull.UP  # 启用内部上拉电阻
     while True:
-        current_state = button.value
-        now = time.monotonic()
-        
-        # 按键状态变化且消抖时间已过
-        if current_state != last_state and (now - debounce_time) > 0.05:
-            last_state = current_state
-            debounce_time = now
-            
-            # 按键按下(低电平)
-            if not current_state:
-                print("电源按键按下")
-                await app_mgr.stop_app()
-                hmi.tx("any", "page sys_poweroff")
-                
-        await asyncio.sleep(0.01)
+        if not button.value:
+            print("POWER Button Pressed!")
+            app_manager.stop_app()
+            hmi.tx("any","page sys_poweroff")
+        await asyncio.sleep(1)
 
-# 命令处理函数
-async def handle_hid_command(hid, command):
-    try:
-        # 确保是字节类型
-        if isinstance(command, str):
-            command = command.encode()
-            
-        result = await hid.process_command(command)
-        print(f"HID命令结果: {result}")
-        return result
-    except Exception as e:
-        print(f"命令处理异常: {e}")
-        return None
-
-# 主消息循环
-async def main_loop(hmi, hid):
-    while True:
-        # 检查HMI接收
-        command = hmi.rx()
-        if command:
-            print(f"收到命令: {command}")
-            
-            # 如果是HID命令
-            if command.startswith(b"hid "):
-                await handle_hid_command(hid, command)
-            # 其他系统命令可以在这里添加...
-            
-        await asyncio.sleep(0.05)
-
-# 主函数
 async def main():
-    try:
-        # 初始化系统
-        hmi, battery_instance, app_mgr, hid = await initialize_system()
-        
-        # 创建后台任务
-        battery_task = asyncio.create_task(battery_info_task(hmi, battery_instance))
-        key_task = asyncio.create_task(key_scan_task(hmi, app_mgr))
-        
-        # 运行主循环
-        await main_loop(hmi, hid)
-        
-    except Exception as e:
-        print(f"系统错误: {e}")
-        microcontroller.reset()
+    # 创建 hmi_info_send 任务
+    hmi_task = asyncio.create_task(hmi_info_send())
+    key_task = asyncio.create_task(key_scan())
+    
+    while True:
+            command = hmi.rx()
+            if command:
+                print(f"Received command: {command}")
+                cmd = command.strip().split()  # 按空格分割命令
+                print(cmd)
+                if not cmd:
+                    continue
+                # 解码命令列表
+                cmd = [part.decode('utf-8') for part in cmd]
 
-# 启动程序
-if __name__ == "__main__":
-    try:
-        asyncio.run(main())
-    except KeyboardInterrupt:
-        print("程序被用户中断")
-    except Exception as e:
-        print(f"致命错误: {e}")
-        microcontroller.reset()
+                if cmd[0] == "app":
+                    if len(cmd) > 1:
+                        app_name = cmd[1]
+                        await app_manager.run_app(app_name)
+                    else:
+                        print("Error: No app name provided")
+                elif cmd[0] == "stop":
+                    await app_manager.stop_app()
+                elif cmd[0] == "list":
+                    if len(cmd) > 1 and cmd[1] == "app":
+                        applist = []
+                        try:
+                            for filename in os.listdir("/userfiles/app"):
+                                if filename.endswith(".py"):
+                                    file_name_without_extension = filename[:-3]
+                                    applist.append(file_name_without_extension)
+                            print("找到的 .py 文件名（不含后缀）列表：", applist)
+                            if applist:
+                                hmi.tx("any", f'b0.txt="{applist[0]}"')
+                            else:
+                                hmi.tx("any", 'b0.txt="No apps found"')
+                        except Exception as e:
+                            print(f"Error listing apps: {e}")
+                    else:
+                        print("Error: Invalid list command")
+                elif cmd[0] == "mcu":
+                    if len(cmd) > 1 and cmd[1] == "reboot":
+                        hmi.tx("any", "page boot")
+                        microcontroller.reset()
+                    else:
+                        print("Error: Invalid mcu command")
+                elif cmd[0] == "hid":
+                    if cmd[1] == "jp":
+                        hid.hid_key(dongzuo=cmd[2],anjian=cmd[3])  #p/r zhi  
+                    elif cmd[1] == "sb":
+                        if cmd[2] !="m":
+                            hid.hid_mouse_key(action=cmd[2], button=cmd[3])
+                            print(1)
+                        else:
+                            hid.hid_mouse_move( px=int(cmd[3]), py=int(cmd[4]), wheel=int(cmd[5]))
+                                
+                else:
+                    print(f"Error: Unknown command {cmd[0]}")
+            await asyncio.sleep(0.1)  # 调整间隔以适应你的应用
+
+# 运行主函数
+asyncio.run(main())
