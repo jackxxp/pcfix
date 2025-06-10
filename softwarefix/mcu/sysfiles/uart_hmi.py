@@ -21,6 +21,7 @@ class SerialDisplay:
         self.buffer = b""
         # 初始化按键状态变量
         self.key = None
+        self.keyhome = None
 
     def run(self):
         """
@@ -129,4 +130,11 @@ class SerialDisplay:
     def get_key(self):
         key2 = self.key
         self.key = None  # 清除按键变量
+        return key2
+    def set_keyhome(self, key1):
+        self.keyhome = key1
+
+    def get_keyhome(self):
+        key2 = self.keyhome
+        self.keyhome = None  # 清除按键变量
         return key2

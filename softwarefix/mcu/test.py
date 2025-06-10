@@ -1,19 +1,17 @@
-import sys
-sys.path.append('/sysfiles')
-import asyncio
-import battery
+import storage
+import os
 
-async def main():
-    while True:
-        voltage = battery.battery.get_voltage()
-        soc = battery.battery.get_soc()
-        charging = battery.battery.is_charging()
+# 禁用默认的 CIRCUITPY 驱动器
+# storage.disable_usb_drive()
 
-        print(f"Voltage: {voltage:.2f}V")
-        print(f"SOC: {soc:.2f}%")
-        print(f"Charging: {'Yes' if charging else 'No'}")
+# 确保 /userfiles 路径存在
+try:
+    os.listdir("/userfiles")
+except OSError:
+    os.mkdir("/userfiles")
 
-        await asyncio.sleep(1)
+# 重新挂载根目录为可读写
+storage.remount("/", readonly=False)
 
-# 运行主函数
-asyncio.run(main())
+# 挂载 /userfiles 为可读写
+storage.remount("/userfiles", readonly=False)

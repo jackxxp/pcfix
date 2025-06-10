@@ -119,8 +119,12 @@ class hmi_fileset:
                         else:  # 如果是空
                             pass
                     break
-                await asyncio.sleep(0.1)  # 稍微延迟，避免过快的循环
+                elif key == "appback":
+                    print("文件选择器程序退出")
+                    return None       
+#                print("文件选择器程序运行")        
+                await asyncio.sleep(0.2)  # 稍微延迟，避免过快的循环
         if noexit==0:
             return returnfile
 
-            await asyncio.sleep(0.1)  # 稍微延迟，避免过快的循环
+        await asyncio.sleep(0.1)  # 稍微延迟，避免过快的循环

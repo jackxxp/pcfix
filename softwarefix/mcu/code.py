@@ -5,6 +5,7 @@ import time
 import os
 import digitalio
 import microcontroller
+import storage
 sys.path.append('/sysfiles')
 import uart_hmi
 import battery
@@ -72,10 +73,12 @@ async def main():
                         app_name = cmd[2]
                         await app_manager.run_app(app_name)
                     elif cmd[1] == "tx":
-                        hmi.set_key(cmd[2])
+                        if cmd[2] == "apphome":
+                            hmi.set_keyhome(cmd[2])
+                        else:
+                            hmi.set_key(cmd[2])
 
-                elif cmd[0] == "stop":
-                    await app_manager.stop_app()
+
                 elif cmd[0] == "list":
                     if len(cmd) > 1 and cmd[1] == "app":
                         applist = []
