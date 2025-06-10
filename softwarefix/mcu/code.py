@@ -10,7 +10,7 @@ import uart_hmi
 import battery
 import app_manager
 import mcuhid
-
+import fileselector
 
 # 初始化 HMI 和电池模块
 hmi = uart_hmi.SerialDisplay()
@@ -25,6 +25,8 @@ hmi.tx("bootlog", "MCU启动")
 time.sleep(1)
 hmi.tx("any", "page sys_home")
 
+
+    
 async def hmi_info_send():
     while True:
         hmi.run()
@@ -66,11 +68,12 @@ async def main():
                 cmd = [part.decode('utf-8') for part in cmd]
 
                 if cmd[0] == "app":
-                    if len(cmd) > 1:
-                        app_name = cmd[1]
+                    if cmd[1] == "run":
+                        app_name = cmd[2]
                         await app_manager.run_app(app_name)
-                    else:
-                        print("Error: No app name provided")
+                    elif cmd[1] == "tx":
+                        hmi.set_key(cmd[2])
+
                 elif cmd[0] == "stop":
                     await app_manager.stop_app()
                 elif cmd[0] == "list":
@@ -84,6 +87,7 @@ async def main():
                             print("找到的 .py 文件名（不含后缀）列表：", applist)
                             if applist:
                                 hmi.tx("any", f'b0.txt="{applist[0]}"')
+                                hmi.tx("any", f'b1.txt="{applist[1]}"')
                             else:
                                 hmi.tx("any", 'b0.txt="No apps found"')
                         except Exception as e:

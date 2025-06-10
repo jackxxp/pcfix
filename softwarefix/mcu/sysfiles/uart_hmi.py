@@ -118,30 +118,15 @@ class SerialDisplay:
             command = self.buffer[start + len(start_marker):end]
             # 移除缓冲区中已处理的命令部分（包括起始标记和结束标记）
             self.buffer = self.buffer[end + len(end_marker):]
-            # 处理命令
-            self.process_command(command)
             # 返回提取的命令
             return command
         # 如果没有找到完整的命令，返回 None
         return None
 
-    def process_command(self, command):
-        """
-        处理接收到的命令
-        :param command: 接收到的命令（字节类型）
-        """
-        # 去掉 'cmd' 和 'end' 后的命令
-        command = command.decode('utf-8').strip()
-        if command.startswith("appkey b"):
-            # 提取按键值
-            key = command.split(" ")[-1]
-            self.key = key
+    def set_key(self, key1):
+        self.key = key1
 
     def get_key(self):
-        """
-        获取按键状态
-        :return: 按键值
-        """
-        key = self.key
+        key2 = self.key
         self.key = None  # 清除按键变量
-        return key
+        return key2
