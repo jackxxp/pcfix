@@ -67,7 +67,7 @@ class hmi_fileset:
 
         return filelist
     
-    async def set_file(self, dir1="/userfiles", filetype=None):
+    async def set_file(self, dir1="/userfiles", filetype=None, rootdir="/userfiles"):
         # 使用 self.hmi 来访问 HMI 对象
         self.hmi.tx("any", "page sys_app_files")
         page = 1
@@ -101,9 +101,10 @@ class hmi_fileset:
                         page -= 1
                         break
                 elif key == "backdir":
-                    dirnow = self.get_parent_directory(dirnow)
-                    page = 1 
-                    break
+                    if dirnow!=rootdir:
+                        dirnow = self.get_parent_directory(dirnow)
+                        page = 1 
+                        break
                 elif key is not None and key.isdigit() and 0 <= int(key) <= 7:  # 按钮 0-7
                     index = int(key) + (page - 1) * 8
                     if index < len(filelist):

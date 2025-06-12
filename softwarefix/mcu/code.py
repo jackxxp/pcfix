@@ -87,10 +87,23 @@ async def main():
                                 if filename.endswith(".py"):
                                     file_name_without_extension = filename[:-3]
                                     applist.append(file_name_without_extension)
+                            for filename in os.listdir("/sysfiles/app/yuzhuangapp"):
+                                if filename.endswith(".py"):
+                                    file_name_without_extension = filename[:-3]
+                                    applist.append(file_name_without_extension)
                             print("找到的 .py 文件名（不含后缀）列表：", applist)
                             if applist:
-                                hmi.tx("any", f'b0.txt="{applist[0]}"')
-                                hmi.tx("any", f'b1.txt="{applist[1]}"')
+                                try:
+                                    hmi.tx("any", f'b0.txt="{applist[0]}"')
+                                    hmi.tx("any", f'b1.txt="{applist[1]}"')
+                                    hmi.tx("any", f'b2.txt="{applist[2]}"')
+                                    hmi.tx("any", f'b3.txt="{applist[3]}"')
+                                    hmi.tx("any", f'b4.txt="{applist[4]}"')
+                                    hmi.tx("any", f'b5.txt="{applist[5]}"')
+                                    hmi.tx("any", f'b6.txt="{applist[6]}"')
+                                    hmi.tx("any", f'b7.txt="{applist[7]}"')
+                                except:
+                                    pass
                             else:
                                 hmi.tx("any", 'b0.txt="No apps found"')
                         except Exception as e:

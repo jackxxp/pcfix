@@ -4,7 +4,7 @@ import asyncio
 class AppManager:
     def __init__(self, hmi):
         self.current_task = None  # 当前正在运行的应用程序任务
-        self.app_paths = ['/sysfiles/app', '/userfiles/app']  # 应用程序路径
+        self.app_paths = ['/sysfiles/app', '/userfiles/app','/sysfiles/app/yuzhuangapp']  # 应用程序路径
         self.hmi = hmi  # 存储 HMI 对象
 
     async def run_app(self, app_name):
